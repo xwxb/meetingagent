@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"log"
+	"path/filepath"
 	"time"
 
+	"meetingagent/config"
 	"meetingagent/database" // Import the database package
 	"meetingagent/handlers"
 
@@ -15,9 +17,18 @@ import (
 	_ "github.com/mattn/go-sqlite3" // Import SQLite driver for side effects
 )
 
-const dbFile = "meetings.db" // Define database file name
+const dbFile = "meetings.db"    // Define database file name
+const configFile = "config.yml" // Define config file name
 
 func main() {
+	// --- Configuration Setup ---
+	configPath := filepath.Join(".", configFile)
+	cfg, err := config.LoadConfig(configPath)
+	if err != nil {
+		log.Fatalf("Failed to load config: %v", err)
+	}
+	log.Printf("Loaded configuration: API Key=%s, Model=%s", cfg.APIKey[:8]+"...", cfg.Summary.Model)
+
 	// --- Database Setup ---
 	db, err := sql.Open("sqlite3", dbFile+"?_foreign_keys=on") // Enable foreign keys if needed later
 	if err != nil {

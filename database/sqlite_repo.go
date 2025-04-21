@@ -102,6 +102,61 @@ ORDER BY uploaded_at DESC;
 	return meetings, nil
 }
 
+func (r *SQLiteRepository) GetMeetingByID(id int64) (*models.Meeting, error) {
+	query := `
+SELECT id, name, transcript, summary, chat_history, remark,
+	   audio_filename, uploaded_at, modified_at, deleted_at
+FROM meetings
+WHERE id = ? AND deleted_at IS NULL;`
+	row := r.db.QueryRow(query, id)
+	var m models.Meeting
+	err := row.Scan(
+		&m.ID,
+		&m.Name,
+		&m.Transcript,
+		&m.Summary,
+		&m.ChatHistory,
+		&m.Remark,
+		&m.AudioFilename,
+		&m.UploadedAt,
+		&m.ModifiedAt,
+		&m.DeletedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil // No meeting found
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to query meeting by ID: %w", err)
+	}
+	return &m, nil
+}
+
+func (r *SQLiteRepository) UpdateMeeting(id int64, meeting *models.Meeting) error {
+	query := `
+UPDATE meetings
+SET name = ?, transcript = ?, summary = ?, chat_history = ?, remark = ?,
+	audio_filename = ?, modified_at = ?
+WHERE id = ? AND deleted_at IS NULL;
+`
+	// Ensure the modified_at timestamp is updated
+	meeting.ModifiedAt = time.Now()
+
+	_, err := r.db.Exec(query,
+		meeting.Name,
+		meeting.Transcript,
+		meeting.Summary,
+		meeting.ChatHistory,
+		meeting.Remark,
+		meeting.AudioFilename,
+		meeting.ModifiedAt,
+		id,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update meeting: %w", err)
+	}
+
+	return nil
+}
+
 // InitSchema creates the necessary tables if they don't exist.
 func InitSchema(db *sql.DB) error {
 	schema := `

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"meetingagent/models"
+	"meetingagent/services"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/common/utils"
@@ -24,8 +25,6 @@ var meetingRepo models.MeetingRepository
 func SetMeetingRepository(repo models.MeetingRepository) {
 	meetingRepo = repo
 }
-
-// --- Handlers ---
 
 // CreateMeeting handles the creation of a new meeting from raw JSON content
 func CreateMeeting(ctx context.Context, c *app.RequestContext) {
@@ -72,6 +71,31 @@ func CreateMeeting(ctx context.Context, c *app.RequestContext) {
 		return
 	}
 
+	// Generate summary asynchronously
+	go func(meetingID int64, transcript string) {
+		sr, err := services.GetMeetingSummary(ctx, transcript)
+		if err != nil {
+			fmt.Printf("Error generating summary for meeting %d: %v\n", meetingID, err)
+			return
+		}
+
+		jsonByte, marshalErr := json.Marshal(sr)
+		if marshalErr != nil {
+			fmt.Printf("Error marshalling summary response for meeting %d: %v\n", meetingID, marshalErr)
+			return
+		}
+		jsonStr := string(jsonByte)
+
+		// Update meeting with summary
+		meeting.Summary = sql.NullString{String: jsonStr, Valid: true}
+		meeting.ChatHistory = sql.NullString{String: jsonStr, Valid: true}
+		meeting.ModifiedAt = time.Now()
+		if updateErr := meetingRepo.UpdateMeeting(meetingID, meeting); updateErr != nil {
+			fmt.Printf("Error updating meeting %d with summary: %v\n", meetingID, updateErr)
+			return
+		}
+	}(newID, meeting.Transcript.String)
+
 	response := models.PostMeetingResponse{
 		ID: newID,
 	}
@@ -97,26 +121,46 @@ func ListMeetings(ctx context.Context, c *app.RequestContext) {
 	c.JSON(consts.StatusOK, response)
 }
 
-// GetMeetingSummary handles retrieving a meeting summary (Placeholder - needs update)
+// GetMeetingSummary handles retrieving a meeting summary
 func GetMeetingSummary(ctx context.Context, c *app.RequestContext) {
-	meetingID := c.Query("meeting_id")
-	if meetingID == "" {
+	if meetingRepo == nil {
+		c.JSON(consts.StatusInternalServerError, utils.H{"error": "Repository not initialized"})
+		return
+	}
+
+	meetingIDStr := c.Query("meeting_id")
+	if meetingIDStr == "" {
 		c.JSON(consts.StatusBadRequest, utils.H{"error": "meeting_id is required"})
 		return
 	}
-	fmt.Printf("meetingID: %s\n", meetingID)
 
-	// TODO: Implement actual summary retrieval logic
-	response := map[string]interface{}{
-		"content": `
-		Meeting summary for ` + meetingID + `## Summary
-we talked about the project and the next steps, we will have a call next week to discuss the project in more detail.
-
-......
-		`,
+	// Convert meeting_id to int64
+	var meetingID int64
+	_, err := fmt.Sscanf(meetingIDStr, "%d", &meetingID)
+	if err != nil {
+		c.JSON(consts.StatusBadRequest, utils.H{"error": "Invalid meeting_id format"})
+		return
 	}
 
-	c.JSON(consts.StatusOK, response)
+	// Get meeting from repository
+	meeting, err := meetingRepo.GetMeetingByID(meetingID)
+	if err != nil {
+		c.JSON(consts.StatusInternalServerError, utils.H{"error": "Failed to retrieve meeting: " + err.Error()})
+		return
+	}
+
+	// If summary doesn't exist yet, generate it
+	if !meeting.Summary.Valid || meeting.Summary.String == "" {
+		c.JSON(consts.StatusOK, utils.H{
+			"content": "The summary is still being generated. Please try again in a moment.",
+		})
+		return
+	}
+
+	// Parse tasks from JSON if available todo
+
+
+	c.JSON(consts.StatusOK, meeting.Summary.String)
 }
 
 // HandleChat handles the SSE chat session

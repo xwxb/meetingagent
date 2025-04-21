@@ -19,10 +19,13 @@ type Meeting struct {
 	DeletedAt     sql.NullTime   `json:"-"` // Use '-' to exclude from default JSON responses
 }
 
+
 // MeetingRepository defines the interface for meeting data operations
 type MeetingRepository interface {
 	CreateMeeting(meeting *Meeting) (int64, error)
 	ListMeetings() ([]Meeting, error)
+	GetMeetingByID(id int64) (*Meeting, error)
+	UpdateMeeting(id int64, meeting *Meeting) error
 }
 
 // --- Existing structs (keeping them for now, might need adjustment later) ---
@@ -42,4 +45,11 @@ type GetMeetingsResponse struct {
 // ChatMessage represents a chat message in the SSE stream
 type ChatMessage struct {
 	Data string `json:"data"`
+}
+
+
+// SummaryResponse represents the structured JSON response from the LLM
+type SummaryResponse struct {
+	Summary string   `json:"summary"`
+	Tasks   []string `json:"tasks"`
 }
