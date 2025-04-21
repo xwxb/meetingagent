@@ -17,9 +17,44 @@ const summaryMarkdown = document.getElementById('summaryMarkdown');
 const jsonPathInput = document.getElementById('jsonPathInput');
 const convertToMarkdownBtn = document.getElementById('convertToMarkdownBtn');
 const showJsonBtn = document.getElementById('showJsonBtn');
+const tasksList = document.getElementById('tasksList');
 const chatMessages = document.getElementById('chatMessages');
 const chatInput = document.getElementById('chatInput');
 const sendMessageBtn = document.getElementById('sendMessageBtn');
+
+// Task status utilities
+function getTaskStatus(tasksStatusNum, index) {
+    return (tasksStatusNum & (1 << index)) !== 0;
+}
+
+async function loadTasks(meetingId) {
+    try {
+        const response = await fetch(`/tasks?meeting_id=${meetingId}`);
+        const data = await response.json();
+        
+        if (!data.tasks || !Array.isArray(data.tasks)) {
+            tasksList.innerHTML = '<div class="text-gray-500">No tasks available</div>';
+            return;
+        }
+
+        const tasksHtml = data.tasks.map((task, index) => {
+            const isCompleted = getTaskStatus(data.tasks_status_num, index);
+            return `
+                <div class="task-item p-2 bg-white rounded shadow">
+                    <div class="flex items-center gap-2">
+                        <div class="w-4 h-4 ${isCompleted ? 'bg-green-500' : 'bg-gray-300'} rounded-full"></div>
+                        <span class="${isCompleted ? 'line-through text-gray-500' : ''}">${task}</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        tasksList.innerHTML = tasksHtml || '<div class="text-gray-500">No tasks available</div>';
+    } catch (error) {
+        console.error('Error loading tasks:', error);
+        tasksList.innerHTML = '<div class="text-red-500">Failed to load tasks</div>';
+    }
+}
 
 // URL State Management
 function updateURLState() {
@@ -63,9 +98,9 @@ function switchTab(tab) {
 }
 
 // Initialize JSON Editor
-function initJsonEditor() {
+function initTranscriptJsonEditor() {
   const options = {
-    mode: 'view',
+    mode: 'code',
     modes: ['view', 'code'],
     onModeChange: function (newMode) {
       if (newMode === 'code') {
@@ -169,7 +204,8 @@ async function handleFileUpload(e) {
     const response = await fetch('/meeting', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'text/plain',
+        'X-File-Name': file.name
       },
       body: content
     });
@@ -181,7 +217,9 @@ async function handleFileUpload(e) {
     selectMeeting(data.id);
   } catch (error) {
     console.error('Error:', error);
-    alert('Failed to create meeting');
+    alert(error.message || 'Failed to create meeting');
+  } finally {
+    fileInput.value = ''; // Clear the file input
   }
 }
 
@@ -192,8 +230,8 @@ async function loadMeetings() {
 
     meetingList.innerHTML = data.meetings.map(meeting => `
             <div class="meeting-item" data-id="${meeting.id}">
-                <div class="font-medium">${meeting.content.title || 'Untitled Meeting'}</div>
-                <div class="text-sm text-gray-500">${new Date().toLocaleDateString()}</div>
+                <div class="font-medium">${meeting.name}</div>
+                <div class="text-sm text-gray-500">${new Date(meeting.uploaded_at).toLocaleDateString()}</div>
             </div>
         `).join('');
 
@@ -222,15 +260,14 @@ async function selectMeeting(meetingId) {
   try {
     const response = await fetch('/meeting');
     const data = await response.json();
-    const meeting = data.meetings.find(m => m.id === meetingId);
+    const meeting = data.meetings.find(m => m.id == meetingId);
+    // console.log(data, meetingId);
     if (meeting) {
-      currentMeetingContent = meeting.content;
-      // Update JSON editor
+      currentMeetingContent = meeting.transcript;
       if (!jsonEditor) {
-        initJsonEditor();
+        initTranscriptJsonEditor();
       }
-      jsonEditor.set(meeting.content);
-      jsonEditor.expandAll();
+      jsonEditor.set(currentMeetingContent.String);
     }
   } catch (error) {
     console.error('Error:', error);
@@ -261,8 +298,9 @@ async function selectMeeting(meetingId) {
     console.error('Error:', error);
   }
 
-  // Clear chat
+  // Clear chat and load tasks
   chatMessages.innerHTML = '';
+  await loadTasks(meetingId);
 }
 
 async function sendMessage() {

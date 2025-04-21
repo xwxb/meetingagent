@@ -1,0 +1,7 @@
+config.yml
+*.db
+.roo
+
+debug
+.DS_Store
+
