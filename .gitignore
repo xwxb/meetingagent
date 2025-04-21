@@ -3,3 +3,5 @@ config.yml
 .roo
 
 debug
+.DS_Store
+

@@ -65,7 +65,7 @@ func updateTaskStatusHandler(ctx context.Context, request mcp.CallToolRequest) (
 	}
 	meetingID, err := strconv.ParseInt(meetingIDStr, 10, 64)
 	if err != nil {
-		return nil, errors.New("invalid meeting_id format")
+		return nil, fmt.Errorf("invalid meeting_id %v format: %v", meetingID, err)
 	}
 
 	taskIndexStr, ok := request.Params.Arguments["task_index"].(string)
