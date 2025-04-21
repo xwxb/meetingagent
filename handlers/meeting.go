@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"meetingagent/models"
@@ -14,53 +16,88 @@ import (
 	"github.com/hertz-contrib/sse"
 )
 
-// CreateMeeting handles the creation of a new meeting
+// --- Placeholder for Repository Dependency ---
+// In a real app, this would be properly injected (e.g., via a handler struct)
+var meetingRepo models.MeetingRepository
+
+// SetMeetingRepository allows setting the repository (simple injection for now)
+func SetMeetingRepository(repo models.MeetingRepository) {
+	meetingRepo = repo
+}
+
+// --- Handlers ---
+
+// CreateMeeting handles the creation of a new meeting from raw JSON content
 func CreateMeeting(ctx context.Context, c *app.RequestContext) {
-	var reqBody map[string]interface{}
-	if err := c.BindJSON(&reqBody); err != nil {
-		c.JSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+	if meetingRepo == nil {
+		c.JSON(consts.StatusInternalServerError, utils.H{"error": "Repository not initialized"})
 		return
 	}
 
-	jsonBody, err := json.Marshal(reqBody)
+	// Get file content
+	body, err := c.Body()
 	if err != nil {
-		c.JSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		c.JSON(consts.StatusBadRequest, utils.H{"error": "Failed to read request body"})
 		return
 	}
 
-	fmt.Printf("create meeting: %s\n", string(jsonBody))
-
-	// TODO: Implement actual meeting creation logic
-	response := models.PostMeetingResponse{
-		ID: "meeting_" + time.Now().Format("20060102150405"),
+	// Get the original filename from header
+	fileName := string(c.GetHeader("X-File-Name"))
+	if fileName == "" {
+		fileName = "meeting_" + time.Now().Format("20060102150405")
 	}
 
-	c.JSON(consts.StatusOK, response)
+	currentTime := time.Now()
+	meeting := &models.Meeting{
+		Name:          fileName,
+		AudioFilename: fileName,
+		Transcript:    sql.NullString{String: string(body), Valid: true},
+		UploadedAt:    currentTime,
+		ModifiedAt:    currentTime,
+	}
+
+	// Try to create with original name
+	newID, err := meetingRepo.CreateMeeting(meeting)
+	if err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed") {
+		// On name conflict, generate new name with timestamp and try again
+		meeting.Name = "meeting_" + time.Now().Format("20060102150405")
+		meeting.AudioFilename = meeting.Name
+		newID, err = meetingRepo.CreateMeeting(meeting)
+		if err != nil {
+			c.JSON(consts.StatusInternalServerError, utils.H{"error": "Failed to create meeting record: " + err.Error()})
+			return
+		}
+	} else if err != nil {
+		c.JSON(consts.StatusInternalServerError, utils.H{"error": "Failed to create meeting record: " + err.Error()})
+		return
+	}
+
+	response := models.PostMeetingResponse{
+		ID: newID,
+	}
+	c.JSON(consts.StatusCreated, response)
 }
 
 // ListMeetings handles listing all meetings
 func ListMeetings(ctx context.Context, c *app.RequestContext) {
-	// TODO: Implement actual meeting retrieval logic
-	response := models.GetMeetingsResponse{
-		Meetings: []models.Meeting{
-			{
-				ID: "meeting_123",
-				Content: map[string]interface{}{
-					"title":        "Sample Meeting",
-					"description":  "This is a sample meeting",
-					"participants": []string{"John Doe", "Jane Smith"},
-					"start_time":   "2025-04-20 08:00:00",
-					"end_time":     "2025-04-20 09:00:00",
-					"content":      "This is the content of the meeting",
-				},
-			},
-		},
+	if meetingRepo == nil {
+		c.JSON(consts.StatusInternalServerError, utils.H{"error": "Repository not initialized"})
+		return
 	}
 
+	meetings, err := meetingRepo.ListMeetings()
+	if err != nil {
+		c.JSON(consts.StatusInternalServerError, utils.H{"error": "Failed to retrieve meetings: " + err.Error()})
+		return
+	}
+
+	response := models.GetMeetingsResponse{
+		Meetings: meetings,
+	}
 	c.JSON(consts.StatusOK, response)
 }
 
-// GetMeetingSummary handles retrieving a meeting summary
+// GetMeetingSummary handles retrieving a meeting summary (Placeholder - needs update)
 func GetMeetingSummary(ctx context.Context, c *app.RequestContext) {
 	meetingID := c.Query("meeting_id")
 	if meetingID == "" {

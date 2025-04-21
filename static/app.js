@@ -63,9 +63,9 @@ function switchTab(tab) {
 }
 
 // Initialize JSON Editor
-function initJsonEditor() {
+function initTranscriptJsonEditor() {
   const options = {
-    mode: 'view',
+    mode: 'code',
     modes: ['view', 'code'],
     onModeChange: function (newMode) {
       if (newMode === 'code') {
@@ -169,7 +169,8 @@ async function handleFileUpload(e) {
     const response = await fetch('/meeting', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'text/plain',
+        'X-File-Name': file.name
       },
       body: content
     });
@@ -181,7 +182,9 @@ async function handleFileUpload(e) {
     selectMeeting(data.id);
   } catch (error) {
     console.error('Error:', error);
-    alert('Failed to create meeting');
+    alert(error.message || 'Failed to create meeting');
+  } finally {
+    fileInput.value = ''; // Clear the file input
   }
 }
 
@@ -192,8 +195,8 @@ async function loadMeetings() {
 
     meetingList.innerHTML = data.meetings.map(meeting => `
             <div class="meeting-item" data-id="${meeting.id}">
-                <div class="font-medium">${meeting.content.title || 'Untitled Meeting'}</div>
-                <div class="text-sm text-gray-500">${new Date().toLocaleDateString()}</div>
+                <div class="font-medium">${meeting.name}</div>
+                <div class="text-sm text-gray-500">${new Date(meeting.uploaded_at).toLocaleDateString()}</div>
             </div>
         `).join('');
 
@@ -222,15 +225,14 @@ async function selectMeeting(meetingId) {
   try {
     const response = await fetch('/meeting');
     const data = await response.json();
-    const meeting = data.meetings.find(m => m.id === meetingId);
+    const meeting = data.meetings.find(m => m.id == meetingId);
+    // console.log(data, meetingId);
     if (meeting) {
-      currentMeetingContent = meeting.content;
-      // Update JSON editor
+      currentMeetingContent = meeting.transcript;
       if (!jsonEditor) {
-        initJsonEditor();
+        initTranscriptJsonEditor();
       }
-      jsonEditor.set(meeting.content);
-      jsonEditor.expandAll();
+      jsonEditor.set(currentMeetingContent.String);
     }
   } catch (error) {
     console.error('Error:', error);
