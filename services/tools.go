@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"meetingagent/config"
 	"meetingagent/models"
 
@@ -12,10 +13,21 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-// GetMeetingSummary generates a summary for a meeting given its transcript
-func GetMeetingSummary(ctx context.Context, transcript string) (*models.SummaryResponse, error) {
+func Init() {
+	bgCtx := context.Background()
+	if err := initSummaryChatModel(bgCtx); err != nil {
+		log.Fatalf("failed to init SummaryChatModel: %v", err)
+	}
+	log.Printf("✔ ChatModels initialized")
+}
+
+var SummaryChatModel *ark.ChatModel
+
+// var ChatAgentModel *ark.ChatModel
+
+func initSummaryChatModel(ctx context.Context) error {
 	if config.AppConfig == nil {
-		return nil, fmt.Errorf("application config not initialized")
+		return fmt.Errorf("application config not initialized")
 	}
 
 	cm, err := ark.NewChatModel(ctx, &ark.ChatModelConfig{
@@ -24,7 +36,17 @@ func GetMeetingSummary(ctx context.Context, transcript string) (*models.SummaryR
 		Model:   config.AppConfig.Summary.Model,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize chat model: %v", err)
+		return fmt.Errorf("failed to initialize chat model: %v", err)
+	}
+
+	SummaryChatModel = cm
+	return nil
+}
+
+// GetMeetingSummary generates a summary for a meeting given its transcript
+func GetMeetingSummary(ctx context.Context, transcript string) (*models.SummaryResponse, error) {
+	if SummaryChatModel == nil {
+		return nil, fmt.Errorf("summary chat model not initialized")
 	}
 
 	// Prepare messages for the LLM
@@ -37,20 +59,17 @@ func GetMeetingSummary(ctx context.Context, transcript string) (*models.SummaryR
 	}
 
 	// Generate summary
-	response, err := cm.Generate(ctx, messages, model.WithTemperature(0.8))
+	response, err := SummaryChatModel.Generate(ctx, messages, model.WithTemperature(0.8))
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate summary: %v", err)
 	}
 
-	// log.Default().Printf("Response: %s", response.Content)
-
-	// 这里做一个处理，如果第一行和最后一行包含 ``` 则去掉
+	// Process response content
 	if len(response.Content) > 0 {
 		if response.Content[0] == '`' && response.Content[len(response.Content)-1] == '`' {
 			response.Content = response.Content[7 : len(response.Content)-3]
 		}
 	}
-	// log.Default().Printf("Processed Response: %s", response.Content)
 
 	// Parse the JSON response
 	var summaryResponse models.SummaryResponse

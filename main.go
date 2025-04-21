@@ -10,6 +10,7 @@ import (
 	"meetingagent/config"
 	"meetingagent/database" // Import the database package
 	"meetingagent/handlers"
+	"meetingagent/services"
 
 	"github.com/cloudwego/hertz/pkg/app"
 	"github.com/cloudwego/hertz/pkg/app/server"
@@ -28,6 +29,7 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 	log.Printf("Loaded configuration: API Key=%s, Model=%s", cfg.APIKey[:8]+"...", cfg.Summary.Model)
+	services.Init()
 
 	// --- Database Setup ---
 	db, err := sql.Open("sqlite3", dbFile+"?_foreign_keys=on") // Enable foreign keys if needed later
