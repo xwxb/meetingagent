@@ -1,0 +1,149 @@
+package handlers
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"meetingagent/models"
+
+	"github.com/cloudwego/hertz/pkg/app"
+	"github.com/cloudwego/hertz/pkg/common/utils"
+	"github.com/cloudwego/hertz/pkg/protocol/consts"
+	"github.com/hertz-contrib/sse"
+)
+
+// CreateMeeting handles the creation of a new meeting
+func CreateMeeting(ctx context.Context, c *app.RequestContext) {
+	var reqBody map[string]interface{}
+	if err := c.BindJSON(&reqBody); err != nil {
+		c.JSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		return
+	}
+
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		c.JSON(consts.StatusBadRequest, utils.H{"error": err.Error()})
+		return
+	}
+
+	fmt.Printf("create meeting: %s\n", string(jsonBody))
+
+	// TODO: Implement actual meeting creation logic
+	response := models.PostMeetingResponse{
+		ID: "meeting_" + time.Now().Format("20060102150405"),
+	}
+
+	c.JSON(consts.StatusOK, response)
+}
+
+// ListMeetings handles listing all meetings
+func ListMeetings(ctx context.Context, c *app.RequestContext) {
+	// TODO: Implement actual meeting retrieval logic
+	response := models.GetMeetingsResponse{
+		Meetings: []models.Meeting{
+			{
+				ID: "meeting_123",
+				Content: map[string]interface{}{
+					"title":        "Sample Meeting",
+					"description":  "This is a sample meeting",
+					"participants": []string{"John Doe", "Jane Smith"},
+					"start_time":   "2025-04-20 08:00:00",
+					"end_time":     "2025-04-20 09:00:00",
+					"content":      "This is the content of the meeting",
+				},
+			},
+		},
+	}
+
+	c.JSON(consts.StatusOK, response)
+}
+
+// GetMeetingSummary handles retrieving a meeting summary
+func GetMeetingSummary(ctx context.Context, c *app.RequestContext) {
+	meetingID := c.Query("meeting_id")
+	if meetingID == "" {
+		c.JSON(consts.StatusBadRequest, utils.H{"error": "meeting_id is required"})
+		return
+	}
+	fmt.Printf("meetingID: %s\n", meetingID)
+
+	// TODO: Implement actual summary retrieval logic
+	response := map[string]interface{}{
+		"content": `
+		Meeting summary for ` + meetingID + `## Summary
+we talked about the project and the next steps, we will have a call next week to discuss the project in more detail.
+
+......
+		`,
+	}
+
+	c.JSON(consts.StatusOK, response)
+}
+
+// HandleChat handles the SSE chat session
+func HandleChat(ctx context.Context, c *app.RequestContext) {
+	meetingID := c.Query("meeting_id")
+	sessionID := c.Query("session_id")
+	message := c.Query("message")
+
+	if meetingID == "" || sessionID == "" {
+		c.JSON(consts.StatusBadRequest, utils.H{"error": "meeting_id and session_id are required"})
+		return
+	}
+
+	if message == "" {
+		c.JSON(consts.StatusBadRequest, utils.H{"error": "message is required"})
+		return
+	}
+
+	fmt.Printf("meetingID: %s, sessionID: %s, message: %s\n", meetingID, sessionID, message)
+
+	// Set SSE headers
+	c.Response.Header.Set("Content-Type", "text/event-stream")
+	c.Response.Header.Set("Cache-Control", "no-cache")
+	c.Response.Header.Set("Connection", "keep-alive")
+
+	// Create SSE stream
+	stream := sse.NewStream(c)
+
+	// TODO: Implement actual chat logic
+	// This is a simple example that sends a message every second
+	ticker := time.NewTicker(time.Millisecond * 100)
+	stopChan := make(chan struct{})
+	go func() {
+		time.AfterFunc(time.Second, func() {
+			ticker.Stop()
+			close(stopChan)
+		})
+	}()
+
+	msg := fmt.Sprintf("Fake sample chat message: %s\n", time.Now().Format(time.RFC3339))
+
+	for {
+		select {
+		case <-ticker.C:
+			res := models.ChatMessage{
+				Data: msg,
+			}
+
+			data, err := json.Marshal(res)
+			if err != nil {
+				return
+			}
+
+			event := &sse.Event{
+				Data: data,
+			}
+
+			if err := stream.Publish(event); err != nil {
+				return
+			}
+		case <-stopChan:
+			return
+		case <-ctx.Done():
+			return
+		}
+	}
+}
