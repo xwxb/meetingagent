@@ -17,9 +17,44 @@ const summaryMarkdown = document.getElementById('summaryMarkdown');
 const jsonPathInput = document.getElementById('jsonPathInput');
 const convertToMarkdownBtn = document.getElementById('convertToMarkdownBtn');
 const showJsonBtn = document.getElementById('showJsonBtn');
+const tasksList = document.getElementById('tasksList');
 const chatMessages = document.getElementById('chatMessages');
 const chatInput = document.getElementById('chatInput');
 const sendMessageBtn = document.getElementById('sendMessageBtn');
+
+// Task status utilities
+function getTaskStatus(tasksStatusNum, index) {
+    return (tasksStatusNum & (1 << index)) !== 0;
+}
+
+async function loadTasks(meetingId) {
+    try {
+        const response = await fetch(`/tasks?meeting_id=${meetingId}`);
+        const data = await response.json();
+        
+        if (!data.tasks || !Array.isArray(data.tasks)) {
+            tasksList.innerHTML = '<div class="text-gray-500">No tasks available</div>';
+            return;
+        }
+
+        const tasksHtml = data.tasks.map((task, index) => {
+            const isCompleted = getTaskStatus(data.tasks_status_num, index);
+            return `
+                <div class="task-item p-2 bg-white rounded shadow">
+                    <div class="flex items-center gap-2">
+                        <div class="w-4 h-4 ${isCompleted ? 'bg-green-500' : 'bg-gray-300'} rounded-full"></div>
+                        <span class="${isCompleted ? 'line-through text-gray-500' : ''}">${task}</span>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        tasksList.innerHTML = tasksHtml || '<div class="text-gray-500">No tasks available</div>';
+    } catch (error) {
+        console.error('Error loading tasks:', error);
+        tasksList.innerHTML = '<div class="text-red-500">Failed to load tasks</div>';
+    }
+}
 
 // URL State Management
 function updateURLState() {
@@ -263,8 +298,9 @@ async function selectMeeting(meetingId) {
     console.error('Error:', error);
   }
 
-  // Clear chat
+  // Clear chat and load tasks
   chatMessages.innerHTML = '';
+  await loadTasks(meetingId);
 }
 
 async function sendMessage() {

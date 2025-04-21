@@ -17,6 +17,55 @@ import (
 	"github.com/hertz-contrib/sse"
 )
 
+// GetMeetingTasks handles retrieving tasks for a meeting
+func GetMeetingTasks(ctx context.Context, c *app.RequestContext) {
+	if meetingRepo == nil {
+		c.JSON(consts.StatusInternalServerError, utils.H{"error": "Repository not initialized"})
+		return
+	}
+
+	meetingIDStr := c.Query("meeting_id")
+	if meetingIDStr == "" {
+		c.JSON(consts.StatusBadRequest, utils.H{"error": "meeting_id is required"})
+		return
+	}
+
+	// Convert meeting_id to int64
+	var meetingID int64
+	_, err := fmt.Sscanf(meetingIDStr, "%d", &meetingID)
+	if err != nil {
+		c.JSON(consts.StatusBadRequest, utils.H{"error": "Invalid meeting_id format"})
+		return
+	}
+
+	// Get meeting from repository
+	meeting, err := meetingRepo.GetMeetingByID(meetingID)
+	if err != nil {
+		c.JSON(consts.StatusInternalServerError, utils.H{"error": "Failed to retrieve meeting: " + err.Error()})
+		return
+	}
+
+	if !meeting.TasksJSON.Valid || meeting.TasksJSON.String == "" {
+		c.JSON(consts.StatusOK, utils.H{
+			"tasks": []string{},
+			"tasks_status_num": 0,
+		})
+		return
+	}
+
+	// Parse tasks from JSON
+	var tasks []string
+	if err := json.Unmarshal([]byte(meeting.TasksJSON.String), &tasks); err != nil {
+		c.JSON(consts.StatusInternalServerError, utils.H{"error": "Failed to parse tasks: " + err.Error()})
+		return
+	}
+
+	c.JSON(consts.StatusOK, utils.H{
+		"tasks": tasks,
+		"tasks_status_num": meeting.TasksStatusNum,
+	})
+}
+
 // --- Placeholder for Repository Dependency ---
 // In a real app, this would be properly injected (e.g., via a handler struct)
 var meetingRepo models.MeetingRepository

@@ -59,6 +59,7 @@
                     <div class="flex border-b mb-4">
                         <button class="tab-btn active px-4 py-2" data-tab="content">Content</button>
                         <button class="tab-btn px-4 py-2" data-tab="summary">Summary</button>
+                        <button class="tab-btn px-4 py-2" data-tab="tasks">Tasks</button>
                         <button class="tab-btn px-4 py-2" data-tab="chat">Chat</button>
                     </div>
 
@@ -89,6 +90,16 @@
                             </div>
                             <div id="summaryJsonViewer" class="flex-1"></div>
                             <div id="summaryMarkdown" class="hidden flex-1 overflow-auto prose prose-sm max-w-none"></div>
+                        </div>
+                    </div>
+
+                    <!-- Tasks Tab -->
+                    <div id="tasksTab" class="tab-content hidden flex-1 flex flex-col">
+                        <div class="p-4 bg-gray-50 rounded flex-1 flex flex-col">
+                            <h3 class="text-lg font-semibold mb-2">Meeting Tasks</h3>
+                            <div id="tasksList" class="flex-1 space-y-2">
+                                <!-- Tasks will be listed here -->
+                            </div>
                         </div>
                     </div>
 
