@@ -84,11 +84,28 @@ func CreateMeeting(ctx context.Context, c *app.RequestContext) {
 			fmt.Printf("Error marshalling summary response for meeting %d: %v\n", meetingID, marshalErr)
 			return
 		}
-		jsonStr := string(jsonByte)
+		// Parse the summary response
+		var summaryResp models.SummaryResponse
+		if err := json.Unmarshal(jsonByte, &summaryResp); err != nil {
+			fmt.Printf("Error unmarshalling summary response for meeting %d: %v\n", meetingID, err)
+			return
+		}
 
-		// Update meeting with summary
-		meeting.Summary = sql.NullString{String: jsonStr, Valid: true}
-		meeting.ChatHistory = sql.NullString{String: jsonStr, Valid: true}
+		// Store summary text and tasks separately
+		meeting.SummaryText = sql.NullString{String: summaryResp.Summary, Valid: true}
+
+		// Convert tasks array to JSON string
+		tasksJSON, err := json.Marshal(summaryResp.Tasks)
+		if err != nil {
+			fmt.Printf("Error marshalling tasks for meeting %d: %v\n", meetingID, err)
+			return
+		}
+		meeting.TasksJSON = sql.NullString{String: string(tasksJSON), Valid: true}
+		
+		// Initialize tasks_status_num as 0
+		meeting.TasksStatusNum = 0
+
+		meeting.ChatHistory = sql.NullString{String: string(jsonByte), Valid: true}
 		meeting.ModifiedAt = time.Now()
 		if updateErr := meetingRepo.UpdateMeeting(meetingID, meeting); updateErr != nil {
 			fmt.Printf("Error updating meeting %d with summary: %v\n", meetingID, updateErr)
@@ -150,7 +167,7 @@ func GetMeetingSummary(ctx context.Context, c *app.RequestContext) {
 	}
 
 	// If summary doesn't exist yet, generate it
-	if !meeting.Summary.Valid || meeting.Summary.String == "" {
+	if !meeting.SummaryText.Valid || meeting.SummaryText.String == "" {
 		c.JSON(consts.StatusOK, utils.H{
 			"content": "The summary is still being generated. Please try again in a moment.",
 		})
@@ -160,7 +177,25 @@ func GetMeetingSummary(ctx context.Context, c *app.RequestContext) {
 	// Parse tasks from JSON if available todo
 
 
-	c.JSON(consts.StatusOK, meeting.Summary.String)
+	// Construct response JSON
+	response := struct {
+		SummaryText    string   `json:"summary"`
+		Tasks          []string `json:"tasks"`
+		TasksStatusNum int64    `json:"tasks_status_num"`
+	}{
+		SummaryText: meeting.SummaryText.String,
+		TasksStatusNum: meeting.TasksStatusNum,
+	}
+
+	// Parse tasks from JSON
+	if meeting.TasksJSON.Valid {
+		var tasks []string
+		if err := json.Unmarshal([]byte(meeting.TasksJSON.String), &tasks); err == nil {
+			response.Tasks = tasks
+		}
+	}
+
+	c.JSON(consts.StatusOK, response)
 }
 
 // HandleChat handles the SSE chat session

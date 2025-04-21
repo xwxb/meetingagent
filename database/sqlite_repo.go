@@ -23,9 +23,9 @@ func NewSQLiteRepository(db *sql.DB) *SQLiteRepository {
 func (r *SQLiteRepository) CreateMeeting(meeting *models.Meeting) (int64, error) {
 	query := `
 INSERT INTO meetings (
-    name, transcript, summary, chat_history, remark,
-    audio_filename, uploaded_at, modified_at, deleted_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+	   name, transcript, summary_text, tasks_json, tasks_status_num,
+	   chat_history, remark, audio_filename, uploaded_at, modified_at, deleted_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 `
 	// Ensure timestamps are set if not already
 	if meeting.UploadedAt.IsZero() {
@@ -38,7 +38,9 @@ INSERT INTO meetings (
 	result, err := r.db.Exec(query,
 		meeting.Name,
 		meeting.Transcript,
-		meeting.Summary,
+		meeting.SummaryText,
+		meeting.TasksJSON,
+		meeting.TasksStatusNum,
 		meeting.ChatHistory,
 		meeting.Remark,
 		meeting.AudioFilename,
@@ -62,8 +64,8 @@ INSERT INTO meetings (
 // ListMeetings retrieves all meetings that haven't been deleted
 func (r *SQLiteRepository) ListMeetings() ([]models.Meeting, error) {
 	query := `
-SELECT id, name, transcript, summary, chat_history, remark,
-       audio_filename, uploaded_at, modified_at, deleted_at
+SELECT id, name, transcript, summary_text, tasks_json, tasks_status_num,
+	      chat_history, remark, audio_filename, uploaded_at, modified_at, deleted_at
 FROM meetings
 WHERE deleted_at IS NULL
 ORDER BY uploaded_at DESC;
@@ -81,7 +83,9 @@ ORDER BY uploaded_at DESC;
 			&m.ID,
 			&m.Name,
 			&m.Transcript,
-			&m.Summary,
+			&m.SummaryText,
+			&m.TasksJSON,
+			&m.TasksStatusNum,
 			&m.ChatHistory,
 			&m.Remark,
 			&m.AudioFilename,
@@ -104,8 +108,8 @@ ORDER BY uploaded_at DESC;
 
 func (r *SQLiteRepository) GetMeetingByID(id int64) (*models.Meeting, error) {
 	query := `
-SELECT id, name, transcript, summary, chat_history, remark,
-	   audio_filename, uploaded_at, modified_at, deleted_at
+SELECT id, name, transcript, summary_text, tasks_json, tasks_status_num,
+	   chat_history, remark, audio_filename, uploaded_at, modified_at, deleted_at
 FROM meetings
 WHERE id = ? AND deleted_at IS NULL;`
 	row := r.db.QueryRow(query, id)
@@ -114,7 +118,9 @@ WHERE id = ? AND deleted_at IS NULL;`
 		&m.ID,
 		&m.Name,
 		&m.Transcript,
-		&m.Summary,
+		&m.SummaryText,
+		&m.TasksJSON,
+		&m.TasksStatusNum,
 		&m.ChatHistory,
 		&m.Remark,
 		&m.AudioFilename,
@@ -133,8 +139,8 @@ WHERE id = ? AND deleted_at IS NULL;`
 func (r *SQLiteRepository) UpdateMeeting(id int64, meeting *models.Meeting) error {
 	query := `
 UPDATE meetings
-SET name = ?, transcript = ?, summary = ?, chat_history = ?, remark = ?,
-	audio_filename = ?, modified_at = ?
+SET name = ?, transcript = ?, summary_text = ?, tasks_json = ?, tasks_status_num = ?,
+	chat_history = ?, remark = ?, audio_filename = ?, modified_at = ?
 WHERE id = ? AND deleted_at IS NULL;
 `
 	// Ensure the modified_at timestamp is updated
@@ -143,7 +149,9 @@ WHERE id = ? AND deleted_at IS NULL;
 	_, err := r.db.Exec(query,
 		meeting.Name,
 		meeting.Transcript,
-		meeting.Summary,
+		meeting.SummaryText,
+		meeting.TasksJSON,
+		meeting.TasksStatusNum,
 		meeting.ChatHistory,
 		meeting.Remark,
 		meeting.AudioFilename,
@@ -164,7 +172,9 @@ CREATE TABLE IF NOT EXISTS meetings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
     transcript TEXT,
-    summary TEXT,
+    summary_text TEXT,
+    tasks_json TEXT,
+    tasks_status_num INTEGER DEFAULT 0,
     chat_history TEXT,
     remark TEXT,
     audio_filename TEXT NOT NULL,

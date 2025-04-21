@@ -7,16 +7,18 @@ import (
 
 // Meeting represents a meeting entity in the database
 type Meeting struct {
-	ID            int64          `json:"id"`
-	Name          string         `json:"name"` // Unique name, default to uploaded filename
-	Transcript    sql.NullString `json:"transcript,omitempty"`
-	Summary       sql.NullString `json:"summary,omitempty"`
-	ChatHistory   sql.NullString `json:"chat_history,omitempty"` // Store as JSON string
-	Remark        sql.NullString `json:"remark,omitempty"`
-	AudioFilename string         `json:"audio_filename"` // Original uploaded audio/text filename
-	UploadedAt    time.Time      `json:"uploaded_at"`
-	ModifiedAt    time.Time      `json:"modified_at"`
-	DeletedAt     sql.NullTime   `json:"-"` // Use '-' to exclude from default JSON responses
+	ID             int64          `json:"id"`
+	Name           string         `json:"name"` // Unique name, default to uploaded filename
+	Transcript     sql.NullString `json:"transcript,omitempty"`
+	SummaryText    sql.NullString `json:"summary_text,omitempty"`    // Store only meeting summary content
+	TasksJSON      sql.NullString `json:"tasks_json,omitempty"`      // Store tasks as JSON string array
+	TasksStatusNum int64          `json:"tasks_status_num"`          // Store task status using binary flags
+	ChatHistory    sql.NullString `json:"chat_history,omitempty"`    // Store as JSON string
+	Remark         sql.NullString `json:"remark,omitempty"`
+	AudioFilename  string         `json:"audio_filename"` // Original uploaded audio/text filename
+	UploadedAt     time.Time      `json:"uploaded_at"`
+	ModifiedAt     time.Time      `json:"modified_at"`
+	DeletedAt      sql.NullTime   `json:"-"` // Use '-' to exclude from default JSON responses
 }
 
 
