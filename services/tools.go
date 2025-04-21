@@ -4,43 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"meetingagent/config"
 	"meetingagent/models"
 
-	"github.com/cloudwego/eino-ext/components/model/ark"
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
 )
 
-func Init() {
-	bgCtx := context.Background()
-	if err := initSummaryChatModel(bgCtx); err != nil {
-		log.Fatalf("failed to init SummaryChatModel: %v", err)
-	}
-	log.Printf("✔ ChatModels initialized")
-}
 
-var SummaryChatModel *ark.ChatModel
-
-// var ChatAgentModel *ark.ChatModel
-
-func initSummaryChatModel(ctx context.Context) error {
-	if config.AppConfig == nil {
-		return fmt.Errorf("application config not initialized")
-	}
-
-	cm, err := ark.NewChatModel(ctx, &ark.ChatModelConfig{
-		APIKey:  config.AppConfig.APIKey,
-		BaseURL: config.AppConfig.BaseURL,
-		Model:   config.AppConfig.Summary.Model,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to initialize chat model: %v", err)
-	}
-
-	SummaryChatModel = cm
-	return nil
+// TaskAction represents a task action intent - kept here for Task Specialist logic
+type TaskAction struct {
+	MeetingID string `json:"meeting_id"`
+	TaskIndex string `json:"task_index"`
+	Status    string `json:"status"`
 }
 
 // GetMeetingSummary generates a summary for a meeting given its transcript

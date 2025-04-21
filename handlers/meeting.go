@@ -5,8 +5,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/cloudwego/eino/schema"
 
 	"meetingagent/models"
 	"meetingagent/services"
@@ -47,7 +52,7 @@ func GetMeetingTasks(ctx context.Context, c *app.RequestContext) {
 
 	if !meeting.TasksJSON.Valid || meeting.TasksJSON.String == "" {
 		c.JSON(consts.StatusOK, utils.H{
-			"tasks": []string{},
+			"tasks":            []string{},
 			"tasks_status_num": 0,
 		})
 		return
@@ -61,7 +66,7 @@ func GetMeetingTasks(ctx context.Context, c *app.RequestContext) {
 	}
 
 	c.JSON(consts.StatusOK, utils.H{
-		"tasks": tasks,
+		"tasks":            tasks,
 		"tasks_status_num": meeting.TasksStatusNum,
 	})
 }
@@ -150,7 +155,7 @@ func CreateMeeting(ctx context.Context, c *app.RequestContext) {
 			return
 		}
 		meeting.TasksJSON = sql.NullString{String: string(tasksJSON), Valid: true}
-		
+
 		// Initialize tasks_status_num as 0
 		meeting.TasksStatusNum = 0
 
@@ -225,14 +230,13 @@ func GetMeetingSummary(ctx context.Context, c *app.RequestContext) {
 
 	// Parse tasks from JSON if available todo
 
-
 	// Construct response JSON
 	response := struct {
 		SummaryText    string   `json:"summary"`
 		Tasks          []string `json:"tasks"`
 		TasksStatusNum int64    `json:"tasks_status_num"`
 	}{
-		SummaryText: meeting.SummaryText.String,
+		SummaryText:    meeting.SummaryText.String,
 		TasksStatusNum: meeting.TasksStatusNum,
 	}
 
@@ -247,68 +251,120 @@ func GetMeetingSummary(ctx context.Context, c *app.RequestContext) {
 	c.JSON(consts.StatusOK, response)
 }
 
-// HandleChat handles the SSE chat session
+// HandleChat handles the SSE chat session using real-time LLM interaction via multi-agent
 func HandleChat(ctx context.Context, c *app.RequestContext) {
-	meetingID := c.Query("meeting_id")
+	meetingIDStr := c.Query("meeting_id")
 	sessionID := c.Query("session_id")
-	message := c.Query("message")
+	userMessage := c.Query("message")
 
-	if meetingID == "" || sessionID == "" {
+	if meetingIDStr == "" || sessionID == "" {
 		c.JSON(consts.StatusBadRequest, utils.H{"error": "meeting_id and session_id are required"})
 		return
 	}
-
-	if message == "" {
+	if userMessage == "" {
 		c.JSON(consts.StatusBadRequest, utils.H{"error": "message is required"})
 		return
 	}
 
-	fmt.Printf("meetingID: %s, sessionID: %s, message: %s\n", meetingID, sessionID, message)
+	meetingID, err := strconv.ParseInt(meetingIDStr, 10, 64)
+	if err != nil {
+		c.JSON(consts.StatusBadRequest, utils.H{"error": "Invalid meeting_id format"})
+		return
+	}
+
+	if meetingRepo == nil {
+		c.JSON(consts.StatusInternalServerError, utils.H{"error": "Repository not initialized"})
+		return
+	}
+
+	// Fetch meeting data (optional, for future context use)
+	meetingInfo, err := meetingRepo.GetMeetingByID(meetingID)
+	if err != nil {
+		c.JSON(consts.StatusInternalServerError, utils.H{"error": "Failed to retrieve meeting: " + err.Error()})
+		return
+	}
 
 	// Set SSE headers
 	c.Response.Header.Set("Content-Type", "text/event-stream")
 	c.Response.Header.Set("Cache-Control", "no-cache")
 	c.Response.Header.Set("Connection", "keep-alive")
+	c.Response.Header.Set("Access-Control-Allow-Origin", "*")
 
-	// Create SSE stream
-	stream := sse.NewStream(c)
+	sseStream := sse.NewStream(c)
 
-	// TODO: Implement actual chat logic
-	// This is a simple example that sends a message every second
-	ticker := time.NewTicker(time.Millisecond * 100)
-	stopChan := make(chan struct{})
+	// Prepare user message for multi-agent
+	msgs := []*schema.Message{
+		{
+			Role:    schema.System,
+			Content: "Info: meetingId=" + strconv.FormatInt(meetingID, 10),
+		},
+		{
+			Role:    schema.User,
+			Content: "会议纪要：\n" + meetingInfo.Transcript.String,
+		},
+		{
+			Role:    schema.User,
+			Content: "会议总结：\n" + meetingInfo.SummaryText.String,
+		},
+		{
+			Role:    schema.User,
+			Content: userMessage,
+		},
+	}
+	// Use global HostMAt from services package
+	hostMA := services.HostMA
+	if hostMA == nil {
+		sseStream.Publish(&sse.Event{Event: "error", Data: []byte(`{"error": "Multi-agent not initialized"}`)})
+		return
+	}
+
+	// Start streaming response from multi-agent
+	out, err := hostMA.Stream(ctx, msgs)
+	if err != nil {
+		log.Printf("Failed to start multi-agent stream: %v", err)
+		sseStream.Publish(&sse.Event{Event: "error", Data: []byte(`{"error": "Failed to start chat stream"}`)})
+		return
+	}
+	defer out.Close()
+
+	// Goroutine to pipe multi-agent stream to SSE stream
 	go func() {
-		time.AfterFunc(time.Second, func() {
-			ticker.Stop()
-			close(stopChan)
-		})
+		defer out.Close()
+		for {
+			select {
+			case <-ctx.Done():
+				log.Println("Client disconnected, closing stream.")
+				return
+			default:
+				chunk, err := out.Recv()
+				if err != nil {
+					if err == io.EOF {
+						log.Println("Multi-agent stream finished.")
+					} else {
+						log.Printf("Error receiving chunk from multi-agent: %v", err)
+						sseStream.Publish(&sse.Event{Event: "error", Data: []byte(`{"error": "Error receiving data from chat service"}`)})
+					}
+					return
+				}
+				res := models.ChatMessage{
+					Data: chunk.Content,
+				}
+				jsonData, marshalErr := json.Marshal(res)
+				if marshalErr != nil {
+					log.Printf("Error marshalling SSE data: %v", marshalErr)
+					continue
+				}
+				event := &sse.Event{
+					Data: jsonData,
+				}
+				if pubErr := sseStream.Publish(event); pubErr != nil {
+					log.Printf("Error publishing SSE event: %v. Client likely disconnected.", pubErr)
+					return
+				}
+			}
+		}
 	}()
 
-	msg := fmt.Sprintf("Fake sample chat message: %s\n", time.Now().Format(time.RFC3339))
-
-	for {
-		select {
-		case <-ticker.C:
-			res := models.ChatMessage{
-				Data: msg,
-			}
-
-			data, err := json.Marshal(res)
-			if err != nil {
-				return
-			}
-
-			event := &sse.Event{
-				Data: data,
-			}
-
-			if err := stream.Publish(event); err != nil {
-				return
-			}
-		case <-stopChan:
-			return
-		case <-ctx.Done():
-			return
-		}
-	}
+	<-ctx.Done()
+	log.Println("HandleChat request context finished.")
 }
