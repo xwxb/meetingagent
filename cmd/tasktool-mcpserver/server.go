@@ -118,7 +118,7 @@ func updateTaskStatusHandler(ctx context.Context, request mcp.CallToolRequest) (
 		return nil, fmt.Errorf("failed to update task status: %v", err)
 	}
 
-	response := fmt.Sprintf("Updated task %d status to %v for meeting %d. New status_num: %d", 
+	response := fmt.Sprintf("Updated task %d status to %v for meeting %d. New status_num: %d",
 		taskIndex, status, meetingID, statusNum)
 
 	return mcp.NewToolResultText(response), nil

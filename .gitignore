@@ -5,3 +5,6 @@ config.yml
 debug
 .DS_Store
 
+.vscode 
+.idea
+

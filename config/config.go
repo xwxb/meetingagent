@@ -9,10 +9,12 @@ import (
 )
 
 type Config struct {
-	APIKey    string        `yaml:"apikey"`
-	BaseURL   string        `yaml:"base_url"`
-	Summary   SummaryConfig `yaml:"summary"`
-	ChatAgent ChatAgent     `yaml:"chatagent"`
+	APIKey    string         `yaml:"apikey"`
+	BaseURL   string         `yaml:"base_url"`
+	Summary   SummaryConfig  `yaml:"summary"`
+	ChatAgent ChatAgent      `yaml:"chatagent"`
+	Embedder  EmbedderConfig `yaml:"embedder"`
+	Redis     RedisConfig    `yaml:"redis"`
 }
 
 type SummaryConfig struct {
@@ -34,6 +36,16 @@ type ChatSpecialists struct {
 type SpecialistConfig struct {
 	Model         string `yaml:"model"`
 	SystemMessage string `yaml:"system_message"`
+}
+
+type EmbedderConfig struct {
+	Model string `yaml:"model"`
+}
+
+type RedisConfig struct {
+	Addr     string `yaml:"addr"`
+	Password string `yaml:"password"`
+	Db       int    `yaml:"db"`
 }
 
 var AppConfig *Config

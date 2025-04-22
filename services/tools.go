@@ -11,7 +11,6 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-
 // TaskAction represents a task action intent - kept here for Task Specialist logic
 type TaskAction struct {
 	MeetingID string `json:"meeting_id"`

@@ -131,7 +131,6 @@ func newTaskManagementSpecialist(ctx context.Context) (*host.Specialist, error) 
 			// Extract task parameters from user message
 			// this call only need lastest message
 
-
 			// Use LLM to extract task parameters
 			extractionMsg := &schema.Message{
 				Role:    schema.System,
@@ -141,7 +140,7 @@ func newTaskManagementSpecialist(ctx context.Context) (*host.Specialist, error) 
 			msgs := []*schema.Message{
 				extractionMsg,
 			}
-			msgs = append(msgs, input...)  // 目前历史消息没实现，所以还是要带上所有上下文
+			msgs = append(msgs, input...) // 目前历史消息没实现，所以还是要带上所有上下文
 
 			response, err := cm.Generate(ctx, msgs)
 			if err != nil {
